@@ -30,6 +30,23 @@ class Squirrel {
   startClimb(t) {
     this.state = 'climb'; this.tree = t; this.plat = null;
     this.x = t.x + t.w / 2; this.vx = 0; this.vy = 0;
+    this.switchCd = 0.2; // histereza: chwilę nie można od razu zejść z pnia
+  }
+
+  // Zejście z pnia na gałąź. Płynnie (małe przesunięcie), a przed powrotem na pień chroni
+  // reguła „nie chwytaj pnia, idąc od niego” + krótka histereza switchCd.
+  stepOntoPlatform(p, dir) {
+    this.state = 'ground'; this.plat = p; this.y = p.y; this.tree = null;
+    this.x = clamp(this.x + dir * 8, p.x + 2, p.x + p.w - 2);
+    this.vx = dir * 140;
+    this.switchCd = 0.2;
+  }
+
+  // Czy gracz trzyma kierunek „od pnia”? (wtedy chce iść po gałęzi, a nie wspinać się)
+  movingAwayFrom(t, ix) {
+    if (!ix) return false;
+    const rel = this.x - (t.x + t.w / 2);
+    return Math.abs(rel) > 2 && Math.sign(rel) === ix;
   }
 
   update(c, dt, game) {
@@ -38,6 +55,7 @@ class Squirrel {
     if (this.invuln > 0) this.invuln -= dt;
     if (this.fullCd > 0) this.fullCd -= dt;
     if (this.grabCd > 0) this.grabCd -= dt;
+    if (this.switchCd > 0) this.switchCd -= dt;
     if (this.dropT > 0) this.dropT -= dt;
     this.anim += dt;
 
@@ -52,67 +70,72 @@ class Squirrel {
     }
 
     const slots = this.slots;
-    const spd = (1 - 0.055 * slots) * (this.powers.speed > 0 ? 1.4 : 1);
+    const spd = (1 - 0.055 * slots) * (this.powers.speed > 0 ? 1.4 : 1) * (this.fleeBoost || 1);
     const jmp = (1 - 0.035 * slots) * (this.powers.speed > 0 ? 1.12 : 1);
     const RUN = 240 * spd;
 
     // --- ładowanie skoku (wskaźnik siły pulsuje 0→1→0; trafienie w zielone pole = idealne wybicie)
-    const canJump = this.state === 'ground' || this.state === 'climb';
-    if (jumpPressed && canJump && !this.charging) { this.charging = true; this.chargeT = 0; this.charge = 0; }
+    // Ładować można w biegu, podczas wspinaczki, a nawet w locie (skok wykona się po wylądowaniu,
+    // jeśli przycisk nadal jest trzymany). „Coyote time” pozwala odbić się tuż po zejściu z krawędzi.
+    if (this.state === 'ground' || this.state === 'climb') this.coyote = 0.12;
+    else if (this.coyote > 0) this.coyote -= dt;
+    const canJump = this.state === 'ground' || this.state === 'climb' || this.coyote > 0;
+    if (jumpPressed && !this.charging) { this.charging = true; this.chargeT = 0; this.charge = 0; }
     if (this.charging) {
-      if (!canJump) this.charging = false;
-      else {
-        this.chargeT += dt;
-        const p = (this.chargeT / 0.7) % 2;
-        this.charge = p < 1 ? p : 2 - p;
-        if (!jumpHeld) this.doJump(ix, jmp, game);
+      this.chargeT += dt;
+      const p = (this.chargeT / 0.7) % 2;
+      this.charge = p < 1 ? p : 2 - p;
+      if (!jumpHeld) {
+        if (canJump) this.doJump(ix, jmp, game);
+        else this.charging = false;
       }
     }
 
     if (this.state === 'ground') {
       const ice = this.plat && this.plat.ice;
-      const target = this.charging ? 0 : ix * RUN;
-      const a = (ix !== 0 && !this.charging) ? (ice ? 3 : 16) : (ice ? 1.6 : 14);
+      const target = ix * RUN * (this.charging ? 0.85 : 1);
+      const a = ix !== 0 ? (ice ? 3 : 16) : (ice ? 1.6 : 14);
       this.vx += (target - this.vx) * Math.min(1, a * dt);
       if (ix) this.facing = ix;
       this.x += this.vx * dt;
       if (this.plat && (this.x < this.plat.x - 4 || this.x > this.plat.x + this.plat.w + 4)) {
         this.state = 'air'; this.plat = null; this.airMax = Math.max(RUN, Math.abs(this.vx));
       }
-      if (this.state === 'ground' && !this.charging && this.bury <= 0) {
+      if (this.state === 'ground' && this.bury <= 0 && !(this.switchCd > 0)) {
         if (iy === -1) {
           const t = trunkAt(world, this.x, this.y - 5);
-          if (t && this.y > t.top + 30) this.startClimb(t);
+          if (t && this.y > t.top + 30 && !this.movingAwayFrom(t, ix)) this.startClimb(t);
         } else if (iy === 1 && this.plat && !this.plat.stump) {
           const t = trunkAt(world, this.x, this.y + 6);
-          if (t) { this.startClimb(t); this.y += 4; }
+          if (t && !this.movingAwayFrom(t, ix)) { this.startClimb(t); this.y += 4; }
           else { this.state = 'air'; this.dropIgnore = this.plat; this.dropT = 0.3; this.plat = null; this.y += 2; this.airMax = RUN; }
         }
       }
     } else if (this.state === 'climb') {
       const t = this.tree;
       this.vx = 0;
-      this.vy = this.charging ? 0 : iy * 190 * spd;
+      this.vy = iy * 190 * spd * (this.charging ? 0.85 : 1);
       this.y += this.vy * dt;
       if (ix) this.facing = ix;
       if (this.y < t.top + 16) {
         this.y = t.top + 16;
-        if (iy === -1) {
+        if (iy === -1 && !(this.switchCd > 0)) {
           const crown = world.platforms.find((p) => p.tree === t && p.crown);
-          if (crown) { this.state = 'ground'; this.plat = crown; this.y = crown.y; this.tree = null; }
+          if (crown) this.stepOntoPlatform(crown, 0);
         }
       }
       if (this.state === 'climb' && this.y >= GROUND_Y) {
         this.y = GROUND_Y;
-        if (iy > 0 || ix !== 0) { this.state = 'ground'; this.plat = null; this.tree = null; this.vx = ix * 100; }
+        if ((iy > 0 || ix !== 0) && !(this.switchCd > 0)) {
+          this.state = 'ground'; this.plat = null; this.tree = null;
+          this.x += ix * 8;
+          this.vx = ix * 140; this.switchCd = 0.2;
+        }
       }
-      if (this.state === 'climb' && ix !== 0 && !this.charging) {
+      if (this.state === 'climb' && ix !== 0 && !(this.switchCd > 0)) {
         for (const p of world.platforms) {
           if (p.tree !== t || Math.abs(p.y - this.y) > 16) continue;
-          if (p.side === ix || p.side === 0) {
-            this.state = 'ground'; this.plat = p; this.y = p.y; this.x += ix * 8; this.tree = null; this.vx = ix * 120;
-            break;
-          }
+          if (p.side === ix || p.side === 0) { this.stepOntoPlatform(p, ix); break; }
         }
       }
     } else { // powietrze
@@ -132,7 +155,8 @@ class Squirrel {
 
       if (iy === -1 && this.grabCd <= 0) {
         const t = trunkAt(world, this.x, this.y - 10);
-        if (t && this.y > t.top + 20) { this.startClimb(t); if (this.isPlayer) game.sfx('land'); }
+        const ownTreeRising = t && t === this.leftTree && this.vy < 0;
+        if (t && this.y > t.top + 20 && !ownTreeRising) { this.startClimb(t); if (this.isPlayer) game.sfx('land'); }
       }
       if (this.state === 'air' && this.vy > 0) {
         let best = null;
@@ -158,6 +182,7 @@ class Squirrel {
     const perfect = this.charge >= 0.88;
     const boost = perfect ? 1.13 : 1;
     const dir = ix !== 0 ? ix : (this.state === 'climb' ? this.facing : 0);
+    this.leftTree = this.state === 'climb' ? this.tree : (this.plat && !this.plat.stump ? this.plat.tree : null);
     this.vy = -(360 + 480 * c) * jmp * boost;
     this.vx = dir * (150 + 290 * c) * jmp * boost;
     if (this.state === 'climb') {
@@ -168,7 +193,7 @@ class Squirrel {
       this.grabCd = 0.15;
     }
     this.airMax = Math.max(240, Math.abs(this.vx));
-    this.state = 'air'; this.plat = null; this.tree = null; this.charging = false;
+    this.state = 'air'; this.plat = null; this.tree = null; this.charging = false; this.coyote = 0;
     if (this.isPlayer) {
       if (perfect) {
         game.sfx('perfect'); game.sparkle(this.x, this.y - 10, '#7dff7a');
@@ -180,6 +205,7 @@ class Squirrel {
 
   land(p, game) {
     const impact = this.vy;
+    this.leftTree = null;
     this.state = 'ground'; this.plat = p; this.y = p ? p.y : GROUND_Y; this.vy = 0;
     if (impact > 1080 && this.powers.golden <= 0) {
       this.stun = 1.1; this.vx = 0;
@@ -199,13 +225,86 @@ class Squirrel {
 }
 
 // ---------------- Mózg konkurencyjnej wiewiórki szarej ----------------
+// Cykl życia: 'forage' (zbiera) → 'flee' (ucieka przed psem na drzewo) → 'hide' (odpoczywa w bezpiecznym miejscu) → 'forage'.
+// Jedzenie (eatT) obsługuje gra, gdy rywal ma 3 przysmaki i nikt mu nie zagraża.
 class RivalBrain {
-  constructor(sq) { this.sq = sq; this.target = null; this.think = 0; this.stuck = 0; this.lastX = sq.x; this.lastY = sq.y; this.wanderX = sq.x; }
+  constructor(sq) {
+    this.sq = sq; this.target = null; this.think = 0; this.stuck = 0; this.lastX = sq.x; this.lastY = sq.y; this.wanderX = sq.x;
+    this.mode = 'forage'; this.fleeT = 0; this.hideT = 0; this.safeTree = null;
+  }
+
+  // Najbliższy groźny pies – tylko gdy wiewiórka jest nisko (trawa, pieniek, dół pnia)
+  nearestThreat(game) {
+    const s = this.sq;
+    if (s.y < GROUND_Y - 70) return null;
+    let best = null, bd = 1e9;
+    for (const d of game.dogs) {
+      if (d.dazed > 0 || d.sleep > 0 || d.scared > 0) continue;
+      const dd = Math.abs(d.x - s.x);
+      // goniący ją pies – ucieka z daleka; spacerujący – dopiero gdy jest tuż obok
+      const range = d.state === 'chase' && d.target === s ? 300 : 120;
+      if (dd < range && dd < bd) { bd = dd; best = d; }
+    }
+    return best;
+  }
+
+  startFlee(game, dog) {
+    const s = this.sq;
+    this.mode = 'flee'; this.fleeT = 0; s.fleeBoost = 1.7; s.eatT = 0; this.target = null;
+    if (s.state === 'climb') this.safeTree = s.tree;
+    else {
+      // najbliższe drzewo, do którego nie trzeba biec przez psa
+      let best = null, bs = 1e9;
+      for (const t of game.world.trees) {
+        const cx = t.x + t.w / 2;
+        let score = Math.abs(cx - s.x);
+        if (dog && (dog.x - s.x) * (cx - s.x) > 0 && Math.abs(dog.x - s.x) < Math.abs(cx - s.x) + 40) score += 600;
+        if (score < bs) { bs = score; best = t; }
+      }
+      this.safeTree = best;
+    }
+    game.say(s, pick(LINES.rivalFlee), '#444');
+  }
+
+  reachSafety(game) {
+    this.mode = 'hide'; this.hideT = 1 + Math.random();
+    this.sq.fleeBoost = 1;
+    game.say(this.sq, pick(LINES.rivalSafe), '#444');
+  }
+
+  fleeCtrl(dt, game, c) {
+    const s = this.sq, t = this.safeTree;
+    this.fleeT += dt;
+    const safeY = Math.max(t.top + 40, GROUND_Y - 300);
+    if (s.state === 'climb') {
+      if (s.y <= safeY) this.reachSafety(game); else c.y = -1;
+      return c;
+    }
+    if (s.state === 'ground' && s.plat && !s.plat.stump && s.y < GROUND_Y - 120) { this.reachSafety(game); return c; }
+    // nie zdążył? „Puff!” – ląduje na najbliższym drzewie
+    if (this.fleeT > 4) { game.rivalPoof(s, t); this.reachSafety(game); return c; }
+    const cx = t.x + t.w / 2;
+    if (Math.abs(cx - s.x) > 8) c.x = Math.sign(cx - s.x);
+    else c.y = -1;
+    if (s.state === 'air') c.y = -1; // łapie się każdego pnia po drodze
+    return c;
+  }
 
   ctrl(dt, game) {
     const s = this.sq;
     const c = blankCtrl();
-    if (s.eatT > 0 || s.stun > 0) return c;
+    if (s.stun > 0) return c;
+    if (this.mode !== 'flee') {
+      const dog = this.nearestThreat(game);
+      if (dog) this.startFlee(game, dog);
+    }
+    if (this.mode === 'flee') return this.fleeCtrl(dt, game, c);
+    if (this.mode === 'hide') {
+      this.hideT -= dt;
+      if (this.hideT <= 0 && s.eatT <= 0) { this.mode = 'forage'; this.think = 0; }
+      return c;
+    }
+    if (s.eatT > 0) return c;
     this.think -= dt;
     if (this.target && (!game.items.includes(this.target) || this.target.taken)) this.target = null;
     if (this.think <= 0 || !this.target) {

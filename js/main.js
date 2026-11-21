@@ -256,6 +256,28 @@ class Game {
     this.sfx('stomp');
   }
 
+  // Pies dopadł szarą wiewiórkę: gubi cały łup, odskakuje i ucieka na drzewo (chwilowo nietykalna)
+  rivalCaught(r, d) {
+    r.eatT = 0;
+    if (r.cheeks.length) this.addText(r.x, r.y - 44, 'Upuścił łup!', '#ffe0a0', 14);
+    this.dropFromCheeks(r, r.cheeks.length);
+    r.stun = 0.35; r.invuln = 3; r.charging = false;
+    r.state = 'air'; r.plat = null; r.tree = null;
+    r.vy = -380; r.vx = Math.sign(r.x - d.x || 1) * 240; r.airMax = 420;
+    r.brain.startFlee(this, d);
+  }
+
+  // Awaryjny „teleport” – szara wiewiórka zjawia się na gałęzi najbliższego drzewa
+  rivalPoof(r, t) {
+    const cands = this.world.platforms.filter((p) => p.tree === t && !p.crown && p.y < GROUND_Y - 180 && p.y > GROUND_Y - 480);
+    const p = cands.length ? cands[Math.floor(Math.random() * cands.length)] : t.crownPlat;
+    this.dust(r.x, r.y, 16, '#dddddd');
+    r.x = p.side < 0 ? p.x + p.w * 0.35 : p.side > 0 ? p.x + p.w * 0.65 : p.x + p.w / 2;
+    r.y = p.y; r.state = 'ground'; r.plat = p; r.tree = null; r.vx = 0; r.vy = 0; r.charging = false;
+    this.sparkle(r.x, r.y - 14, '#e8e8e8');
+    this.addText(r.x, r.y - 40, 'Puff!', '#eeeeee', 16);
+  }
+
   hitRival(s, r) {
     r.stun = 1.3; r.eatT = 0; r.vx = 0;
     this.dropFromCheeks(r, r.cheeks.length);
@@ -419,9 +441,13 @@ class Game {
       if (r.eatT > 0) {
         r.eatT -= dt;
         if (r.eatT <= 0) { r.cheeks = []; this.addText(r.x, r.y - 40, 'Zjedzone…', '#ccc', 14); }
-      } else if (r.cheeks.length >= 3 && r.state === 'ground') {
-        r.eatT = 4; this.say(r, pick(LINES.rivalEat), '#444');
+      } else if ((r.cheeks.length >= 3 || (r.brain.mode === 'hide' && r.cheeks.length > 0)) && (r.state === 'ground' || r.state === 'climb') && r.brain.mode !== 'flee') {
+        // je tylko w spokojnym miejscu: na drzewie albo gdy w pobliżu nie ma psa
+        const safe = r.y < GROUND_Y - 100 || !this.dogs.some((d) => Math.abs(d.x - r.x) < 450 && d.dazed <= 0 && d.sleep <= 0);
+        if (safe) { r.eatT = 4; this.say(r, pick(LINES.rivalEat), '#444'); }
       }
+      // smuga kurzu podczas ucieczki
+      if (r.brain.mode === 'flee' && r.state === 'ground' && Math.random() < 0.4) this.dust(r.x - Math.sign(r.vx) * 10, r.y, 1, '#bfae80');
     }
 
     // przedmioty
@@ -448,12 +474,7 @@ class Game {
         if (!boxOverlap(db, s.box())) continue;
         if (s.powers.golden > 0) { d.scared = 2.5; continue; }
         if (s.isPlayer) this.hurt(s, d);
-        else {
-          s.stun = 1.5; s.invuln = 2; s.eatT = 0;
-          this.dropFromCheeks(s, s.cheeks.length);
-          s.state = 'air'; s.plat = null; s.tree = null; s.vy = -420; s.vx = Math.sign(s.x - d.x || 1) * 260; s.airMax = 260;
-          this.say(s, 'Ratunkuuu!', '#444');
-        }
+        else this.rivalCaught(s, d);
         this.sfx('bark');
       }
     }
@@ -838,10 +859,10 @@ class Game {
       L('Jak grać – sterowanie', 40, 24, '#8a3510', true);
       L('Gracz 1: A/D – ruch,  W/S – wspinaczka,  SPACJA – skok,  E – akcja', 80);
       L('Gracz 2: ←/→ – ruch,  ↑/↓ – wspinaczka,  prawy SHIFT – skok,  prawy CTRL / Enter – akcja', 106);
-      L('Pad: lewa gałka/krzyżak – ruch,  A – skok,  B/X – akcja,  START – pauza', 132);
+      L('Pad: lewa gałka/krzyżak – ruch,  A / LB / LT – skok,  B/X – akcja,  START – pauza', 132);
       L('W trybie 1 gracza działają oba zestawy klawiszy. P/Esc – pauza, M – dźwięk.', 158);
       L('Skakanie', 200, 18, '#8a3510', true);
-      L('• Przytrzymaj SKOK – wskaźnik siły pulsuje. Puść, aby skoczyć w stronę, którą trzymasz.', 228);
+      L('• Przytrzymaj SKOK – wskaźnik siły pulsuje. Możesz przy tym biec i się wspinać. Puść = skok.', 228);
       L('• Puść w ZIELONYM polu = idealne wybicie (+13% siły). Bez kierunku = skok w górę.', 252);
       L('• Za słaby skok = lot na trawę. Upadek z dużej wysokości ogłusza i gubisz orzechy!', 276);
       L('• W locie przytrzymaj GÓRĘ przy pniu, aby się go złapać. DÓŁ na gałęzi = zeskok.', 300);

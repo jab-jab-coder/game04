@@ -49,7 +49,8 @@ const Input = {
     if (ax > dz || b(15)) c.x = 1;
     if (ay < -dz || b(12)) c.y = -1;
     if (ay > dz || b(13)) c.y = 1;
-    if (b(0)) c.jump = true;
+    // skok: A, a także lewy bumper/spust – wygodne, gdy kciuk prawej ręki jest zajęty
+    if (b(0) || b(4) || b(6)) c.jump = true;
     if (b(1) || b(2) || b(3) || b(5) || b(7)) c.action = true;
     if (b(9)) c.pause = true;
   },

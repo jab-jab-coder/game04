@@ -92,6 +92,8 @@ const LINES = {
   rival: ['Moje!', 'Ten orzech miał moje imię!', 'Kto pierwszy, ten lepszy!', 'Spadaj, ruda!', 'Mniam!'],
   rivalHit: ['Ej! To moje!', 'Nieładnie!', 'Auć!'],
   rivalEat: ['Mniam mniam…', 'Chrup chrup!', 'Smacznego mnie!'],
+  rivalFlee: ['Ratunkuuu!', 'Psy! W nogi!', 'Nie jestem smaczny!', 'Mamo, pies!'],
+  rivalSafe: ['Uff… o włos!', 'Ha! Nie dosięgniesz!', 'Bezpieczny!', 'Psy nie umieją się wspinać!'],
   fall: ['Bęc!', 'Auć, mój ogon!', 'Grawitacja 1 : 0 Wiewiórka', 'Nic mi nie jest!'],
   perfect: ['Idealne wybicie!', 'Perfekcyjnie!', 'Jak polatucha!'],
   full: ['Mmmf mmf!', 'Pełne policzki!', 'Nie zmieszczę więcej!'],

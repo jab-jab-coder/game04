@@ -356,7 +356,7 @@ function drawSquirrel(ctx, s, time) {
     ctx.translate(0, 12);
   } else {
     ctx.scale(s.facing, 1);
-    if (s.charging) ctx.scale(1 + s.charge * 0.18, 1 - s.charge * 0.28);
+    if (s.charging && s.state !== 'air') ctx.scale(1 + s.charge * 0.12, 1 - s.charge * 0.2);
     else if (s.state === 'air') { const st = clamp(-s.vy / 2500, -0.12, 0.2); ctx.scale(1 - st * 0.5, 1 + st); }
   }
   if (s.eatT > 0) ctx.translate(0, Math.sin(time * 30) * 1);

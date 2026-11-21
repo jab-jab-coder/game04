@@ -37,7 +37,7 @@ python3 -m http.server 8000
 |---|---|---|---|
 | Ruch | A / D | ← / → | lewa gałka / krzyżak |
 | Wspinaczka / zeskok | W / S | ↑ / ↓ | gałka góra/dół |
-| Skok (przytrzymaj = siła) | Spacja | prawy Shift / Num0 / `/` | A (✕) |
+| Skok (przytrzymaj = siła) | Spacja | prawy Shift / Num0 / `/` | A (✕) / LB / LT |
 | Akcja (rzut szyszką, zakopywanie) | E / Q | prawy Ctrl / Enter / `.` | B / X / Y |
 | Pauza | P / Esc | P / Esc | Start |
 
@@ -62,6 +62,9 @@ Las jest losowany przy każdym podejściu, więc każda rozgrywka wygląda inacz
 ### Skakanie – serce gry
 - Przytrzymaj **skok**: nad wiewiórką pojawia się wskaźnik siły, który **pulsuje** 0 → 100% → 0.
 - Puść, gdy wskaźnik jest w **zielonym polu** → **idealne wybicie** (+13% siły, efekt i dźwięk).
+- Ładując skok, możesz normalnie **biec i wspinać się** (nieco wolniej). Można też zacząć ładować
+  w locie – skok wykona się, gdy puścisz przycisk już po wylądowaniu.
+- Puszczenie skoku tuż po zbiegnięciu z krawędzi gałęzi nadal działa („coyote time”).
 - Kierunek trzymany w chwili puszczenia decyduje o kierunku skoku; bez kierunku – skok w górę.
 - Za słaby skok między drzewami = lot na trawę, gdzie czekają psy.
 - **Upadek z dużej wysokości** ogłusza na chwilę i wysypuje 2 przedmioty z policzków,
@@ -95,8 +98,12 @@ Las jest losowany przy każdym podejściu, więc każda rozgrywka wygląda inacz
   Szyszka ogłusza psa na 3 s.
 - **Sroki** krążą nad lasem i pikują na wiewiórki z pełnymi policzkami, kradnąc orzech.
   Skocz sroce na grzbiet albo traf ją szyszką, a upuści łup (+25 pkt).
-- **Szaruś** (wiewiórka szara) podbiera jedzenie, a po zebraniu 3 sztuk siada i je.
-  Skocz mu na głowę lub rzuć szyszką – wypuści wszystko z łapek (+15 pkt). Psy gonią też jego.
+- **Szaruś** (wiewiórka szara) podbiera jedzenie, a po zebraniu 3 sztuk siada i je
+  (tylko w spokojnym miejscu). Skocz mu na głowę lub rzuć szyszką – wypuści wszystko z łapek (+15 pkt).
+- Psy gonią też Szarusia. Widząc goniącego psa, ucieka bardzo szybko na najbliższe drzewo, które nie
+  stoi za psem, chwilę tam odpoczywa (zjadając, co zdążył zebrać) i wraca do zbierania.
+  Gdy pies go dopadnie, **gubi cały łup** (okazja dla ciebie!), odskakuje i na 3 s staje się nietykalny.
+  Jeśli nie zdąży uciec w 4 s – „Puff!” – zjawia się na gałęzi najbliższego drzewa.
 
 ### Utrata wszystkich serc
 Wiewiórka mdleje na 3,5 s i wraca przy dziupli z 3 sercami (traci zawartość policzków i szyszki).
