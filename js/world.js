@@ -30,8 +30,8 @@ function generateWorld(level, seed) {
     let side = rng() < 0.5 ? -1 : 1;
     while (y > tree.top + 70) {
       const len = R(105, 240);
-      addBranch(tree, platforms, y, side, len, level.ice);
-      if (rng() < 0.3) addBranch(tree, platforms, y + R(-10, 10), -side, R(80, 170), level.ice);
+      addBranch(tree, platforms, y, side, len, level.ice, branchRise(rng, kind));
+      if (rng() < 0.3) addBranch(tree, platforms, y + R(-10, 10), -side, R(80, 170), level.ice, branchRise(rng, kind));
       y -= R(110, 160);
       side = -side;
     }
@@ -55,8 +55,8 @@ function generateWorld(level, seed) {
     if (isHome) {
       tree.hollow = { x: x + w / 2, y: GROUND_Y - 360, rx: 20, ry: 26 };
       // gwarantowana gałąź przy dziupli
-      addBranch(tree, platforms, GROUND_Y - 330, 1, 170, false);
-      addBranch(tree, platforms, GROUND_Y - 330, -1, 170, false);
+      addBranch(tree, platforms, GROUND_Y - 330, 1, 170, false, 0.12);
+      addBranch(tree, platforms, GROUND_Y - 330, -1, 170, false, 0.12);
     }
 
     trees.push(tree);
@@ -91,13 +91,31 @@ function generateWorld(level, seed) {
   return { trees, platforms, decor, width, home, hollowZone, saplings: [], rng };
 }
 
-function addBranch(tree, platforms, y, side, len, ice) {
+// Nachylenie gałęzi: większość rośnie skośnie w górę, część poziomo, nieliczne lekko opadają.
+// rise = tangens kąta (dodatni = w górę na zewnątrz). Świerki/sosny mają gałęzie bardziej poziome/opadające.
+function branchRise(rng, kind) {
+  const deg = kind === 'pine' ? -12 + rng() * 22 : -6 + rng() * 34;
+  return Math.tan(deg * Math.PI / 180);
+}
+
+// p.y = wysokość gałęzi przy pniu; końcówka jest wyżej/niżej zależnie od nachylenia.
+// Różnicę wysokości ograniczamy, by gałęzie nie zachodziły na siebie.
+function addBranch(tree, platforms, y, side, len, ice, rise = 0) {
+  rise = clamp(rise, -22 / len, 60 / len);
   const p = {
     x: side < 0 ? tree.x - len : tree.x,
-    y, w: len + tree.w, h: 12, tree, side, ice, len,
+    y, w: len + tree.w, h: 12, tree, side, ice, len, rise,
   };
   platforms.push(p);
   tree.branches.push(p);
+}
+
+// Wysokość powierzchni platformy w punkcie x (nad pniem gałąź jest płaska)
+function platY(p, x) {
+  if (!p.rise || !p.side) return p.y;
+  const t = p.tree;
+  const out = p.side > 0 ? x - (t.x + t.w) : t.x - x;
+  return p.y - p.rise * clamp(out, 0, p.len);
 }
 
 // Pień, który obejmuje punkt (x, y)
@@ -120,10 +138,10 @@ function randomSpawnPoint(world, preferGround) {
     // unikamy punktu przy samym pniu – orzechy rosną na końcach gałęzi
     let x = p.x + 14 + rng() * (p.w - 28);
     if (p.tree && x > p.tree.x - 10 && x < p.tree.x + p.tree.w + 10 && !p.crown) continue;
-    return { x, y: p.y, ground: false };
+    return { x, y: platY(p, x), ground: false, plat: p };
   }
   const p = plats[Math.floor(rng() * plats.length)];
-  return { x: p.x + p.w / 2, y: p.y, ground: false };
+  return { x: p.x + p.w / 2, y: platY(p, p.x + p.w / 2), ground: false, plat: p };
 }
 
 function weightedType(ground) {

@@ -129,41 +129,48 @@ function drawBranch(ctx, p, L) {
   const t = p.tree;
   const base = p.side < 0 ? t.x : t.x + t.w;
   const tip = p.side < 0 ? p.x : p.x + p.w;
+  const by = p.y, ty = platY(p, tip);            // wysokość przy pniu i na końcu gałęzi
+  const yAt = (f) => lerp(by, ty, f);            // punkt na górnej krawędzi gałęzi
+  // gałąź wrasta w pień nieco niżej (zgrubienie u nasady)
   ctx.fillStyle = t.kind === 'birch' ? '#cfc8b8' : '#6b4527';
   ctx.beginPath();
-  ctx.moveTo(base, p.y - 1);
-  ctx.lineTo(tip, p.y);
-  ctx.lineTo(tip, p.y + 5);
-  ctx.lineTo(base, p.y + 16);
+  ctx.moveTo(base - (tip - base) * 0.04, by - 3);
+  ctx.lineTo(tip, ty);
+  ctx.lineTo(tip, ty + 5);
+  ctx.lineTo(base, by + 18);
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = 'rgba(0,0,0,0.15)';
-  ctx.beginPath(); ctx.moveTo(base, p.y + 10); ctx.lineTo(tip, p.y + 4); ctx.lineTo(tip, p.y + 5); ctx.lineTo(base, p.y + 16); ctx.fill();
-  // gałązka
+  ctx.beginPath(); ctx.moveTo(base, by + 11); ctx.lineTo(tip, ty + 4); ctx.lineTo(tip, ty + 5); ctx.lineTo(base, by + 18); ctx.fill();
+  // gałązka boczna
   ctx.strokeStyle = ctx.fillStyle = t.kind === 'birch' ? '#a9a191' : '#5a3a20';
   ctx.lineWidth = 3;
-  const mid = lerp(base, tip, 0.65);
-  ctx.beginPath(); ctx.moveTo(mid, p.y + 2); ctx.lineTo(mid + (tip - base) * 0.2, p.y - 22); ctx.stroke();
+  const mid = lerp(base, tip, 0.65), midY = yAt(0.65);
+  const twX = mid + (tip - base) * 0.2, twY = midY - 22;
+  ctx.beginPath(); ctx.moveTo(mid, midY + 2); ctx.lineTo(twX, twY); ctx.stroke();
   // listki
   if (t.kind !== 'pine') {
+    const dir = Math.sign(tip - base);
     for (let i = 0; i < 4; i++) {
       ctx.fillStyle = L.leaves[(i + Math.floor(p.y)) % L.leaves.length];
-      ellipse(ctx, tip + (i - 1.5) * 8 * Math.sign(tip - base) * -1, p.y - 6 + (i % 2) * 8, 10, 7); ctx.fill();
+      ellipse(ctx, tip - (i - 1.5) * 8 * dir, ty - 6 + (i % 2) * 8 + (i - 1.5) * 8 * (ty - by) / (Math.abs(tip - base) || 1), 10, 7); ctx.fill();
     }
     ctx.fillStyle = L.leaves[Math.floor(p.y) % L.leaves.length];
-    ellipse(ctx, mid + (tip - base) * 0.2, p.y - 26, 11, 8); ctx.fill();
+    ellipse(ctx, twX, twY - 4, 11, 8); ctx.fill();
   } else {
     ctx.fillStyle = '#2f5a2a';
     for (let i = 0; i < 5; i++) {
-      const xx = lerp(base, tip, 0.2 + i * 0.18);
-      ctx.beginPath(); ctx.moveTo(xx - 10, p.y + 8); ctx.lineTo(xx, p.y - 12); ctx.lineTo(xx + 10, p.y + 8); ctx.fill();
+      const f = 0.2 + i * 0.18, xx = lerp(base, tip, f), yy = yAt(f);
+      ctx.beginPath(); ctx.moveTo(xx - 10, yy + 8); ctx.lineTo(xx, yy - 12); ctx.lineTo(xx + 10, yy + 8); ctx.fill();
     }
   }
   if (p.ice) {
-    ctx.fillStyle = 'rgba(210,240,255,0.9)';
-    ctx.fillRect(Math.min(base, tip), p.y - 2, Math.abs(tip - base), 3);
+    ctx.strokeStyle = 'rgba(210,240,255,0.9)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(base, by - 0.5); ctx.lineTo(tip, ty - 0.5); ctx.stroke();
     ctx.fillStyle = 'rgba(210,240,255,0.8)';
-    for (let x = Math.min(base, tip) + 10; x < Math.max(base, tip); x += 23) {
-      ctx.beginPath(); ctx.moveTo(x, p.y + 6); ctx.lineTo(x + 3, p.y + 16); ctx.lineTo(x + 6, p.y + 6); ctx.fill();
+    const len = Math.abs(tip - base);
+    for (let d = 10; d < len; d += 23) {
+      const f = d / len, x = lerp(base, tip, f), y = yAt(f) + lerp(16, 4, f) - 10;
+      ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x + 3, y + 16); ctx.lineTo(x + 6, y + 6); ctx.fill();
     }
   }
 }

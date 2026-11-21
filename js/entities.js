@@ -36,8 +36,9 @@ class Squirrel {
   // Zejście z pnia na gałąź. Płynnie (małe przesunięcie), a przed powrotem na pień chroni
   // reguła „nie chwytaj pnia, idąc od niego” + krótka histereza switchCd.
   stepOntoPlatform(p, dir) {
-    this.state = 'ground'; this.plat = p; this.y = p.y; this.tree = null;
+    this.state = 'ground'; this.plat = p; this.tree = null;
     this.x = clamp(this.x + dir * 8, p.x + 2, p.x + p.w - 2);
+    this.y = platY(p, this.x);
     this.vx = dir * 140;
     this.switchCd = 0.2;
   }
@@ -100,6 +101,8 @@ class Squirrel {
       this.x += this.vx * dt;
       if (this.plat && (this.x < this.plat.x - 4 || this.x > this.plat.x + this.plat.w + 4)) {
         this.state = 'air'; this.plat = null; this.airMax = Math.max(RUN, Math.abs(this.vx));
+      } else if (this.plat) {
+        this.y = platY(this.plat, this.x); // idzie wzdłuż (skośnej) gałęzi, prędkość pozioma bez zmian
       }
       if (this.state === 'ground' && this.bury <= 0 && !(this.switchCd > 0)) {
         if (iy === -1) {
@@ -149,7 +152,7 @@ class Squirrel {
       }
       this.vx = clamp(this.vx, -this.airMax, this.airMax);
       if (this.vy > 1300) this.vy = 1300;
-      const prevY = this.y;
+      const prevY = this.y, prevX = this.x;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
 
@@ -162,11 +165,11 @@ class Squirrel {
         let best = null;
         for (const p of world.platforms) {
           if (p === this.dropIgnore && this.dropT > 0) continue;
-          if (prevY <= p.y + 0.5 && this.y >= p.y && this.x >= p.x - 3 && this.x <= p.x + p.w + 3) {
-            if (!best || p.y < best.y) best = p;
-          }
+          if (this.x < p.x - 3 || this.x > p.x + p.w + 3) continue;
+          const py = platY(p, this.x);
+          if (prevY <= platY(p, prevX) + 0.5 && this.y >= py && (!best || py < best.py)) best = { p, py };
         }
-        if (best) this.land(best, game);
+        if (best) this.land(best.p, game);
         else if (this.y >= GROUND_Y) this.land(null, game);
       }
     }
@@ -206,7 +209,7 @@ class Squirrel {
   land(p, game) {
     const impact = this.vy;
     this.leftTree = null;
-    this.state = 'ground'; this.plat = p; this.y = p ? p.y : GROUND_Y; this.vy = 0;
+    this.state = 'ground'; this.plat = p; this.y = p ? platY(p, this.x) : GROUND_Y; this.vy = 0;
     if (impact > 1080 && this.powers.golden <= 0) {
       this.stun = 1.1; this.vx = 0;
       game.dust(this.x, this.y, 14, '#c9b38a');
@@ -326,13 +329,14 @@ class RivalBrain {
 
     const tgt = this.target || { x: this.wanderX, y: GROUND_Y, tree: null };
     const ttree = tgt.tree || null;
+    const tgtY = tgt.plat ? tgt.plat.y : tgt.y; // wysokość wejścia na gałąź celu (przy pniu)
     const goTo = (x) => { if (Math.abs(x - s.x) > 6) c.x = Math.sign(x - s.x); };
 
     if (s.state === 'climb') {
       const t = s.tree;
       if (t === ttree) {
-        if (tgt.y < s.y - 8) c.y = -1;
-        else if (tgt.y > s.y + 8) c.y = 1;
+        if (tgtY < s.y - 8) c.y = -1;
+        else if (tgtY > s.y + 8) c.y = 1;
         else c.x = Math.sign(tgt.x - s.x) || 1;
       } else c.y = 1;
     } else if (s.state === 'ground') {
@@ -343,10 +347,10 @@ class RivalBrain {
         goTo(tgt.x); if (Math.abs(tgt.x - s.x) < 8) c.x = 1;
       } else {
         const t = s.plat.tree;
-        if (t === ttree && Math.abs(s.plat.y - tgt.y) < 6) goTo(tgt.x);
+        if (t === ttree && (tgt.plat === s.plat || Math.abs(s.plat.y - tgtY) < 6)) goTo(tgt.x);
         else {
           const cx = t.x + t.w / 2; goTo(cx);
-          if (Math.abs(cx - s.x) < 10) c.y = (t === ttree && tgt.y < s.y) ? -1 : 1;
+          if (Math.abs(cx - s.x) < 10) c.y = (t === ttree && tgtY < s.y) ? -1 : 1;
         }
       }
     } else {
@@ -556,16 +560,16 @@ class Item {
     if (this.spawnAnim > 0) this.spawnAnim -= dt;
     if (this.pickCd > 0) this.pickCd -= dt;
     if (this.resting) return;
-    const prevY = this.y;
+    const prevY = this.y, prevX = this.x;
     this.vy += GRAVITY * dt;
     this.x += this.vx * dt; this.y += this.vy * dt;
     this.vx *= 0.99;
     this.x = clamp(this.x, 15, world.width - 15);
     if (this.vy > 0) {
       for (const p of world.platforms) {
-        if (prevY <= p.y && this.y >= p.y && this.x >= p.x && this.x <= p.x + p.w) {
-          this.y = p.y; this.rest(p); return;
-        }
+        if (this.x < p.x || this.x > p.x + p.w) continue;
+        const py = platY(p, this.x);
+        if (prevY <= platY(p, prevX) && this.y >= py) { this.y = py; this.rest(p); return; }
       }
       if (this.y >= GROUND_Y) { this.y = GROUND_Y; this.rest(null); }
     }

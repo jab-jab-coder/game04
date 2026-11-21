@@ -92,7 +92,7 @@ class Game {
     const sp = randomSpawnPoint(this.world, false);
     const type = weightedType(sp.ground);
     let plat = null;
-    if (!sp.ground) plat = this.world.platforms.find((p) => Math.abs(p.y - sp.y) < 0.1 && sp.x >= p.x && sp.x <= p.x + p.w) || null;
+    if (!sp.ground) plat = sp.plat || null;
     if (initial && type === 'golden') return; // złoty żołądź nie od razu
     for (const p of this.players) if (Math.abs(p.x - sp.x) < 60 && Math.abs(p.y - sp.y) < 60) return;
     const it = new Item(type, sp.x, sp.y, { resting: true, plat });
@@ -273,7 +273,7 @@ class Game {
     const p = cands.length ? cands[Math.floor(Math.random() * cands.length)] : t.crownPlat;
     this.dust(r.x, r.y, 16, '#dddddd');
     r.x = p.side < 0 ? p.x + p.w * 0.35 : p.side > 0 ? p.x + p.w * 0.65 : p.x + p.w / 2;
-    r.y = p.y; r.state = 'ground'; r.plat = p; r.tree = null; r.vx = 0; r.vy = 0; r.charging = false;
+    r.y = platY(p, r.x); r.state = 'ground'; r.plat = p; r.tree = null; r.vx = 0; r.vy = 0; r.charging = false;
     this.sparkle(r.x, r.y - 14, '#e8e8e8');
     this.addText(r.x, r.y - 40, 'Puff!', '#eeeeee', 16);
   }
